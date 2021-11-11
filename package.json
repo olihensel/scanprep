@@ -1,0 +1,24 @@
+{
+  "name": "scanprep",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "ts-node src/watch"
+  },
+  "author": "olihensel",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@types/lodash": "^4.14.176",
+    "@types/sharp": "^0.29.3",
+    "file-type": "^16.5.3",
+    "lodash": "^4.17.21",
+    "moment": "^2.29.1",
+    "node-quirc": "^2.3.0",
+    "pdf-lib": "^1.17.1",
+    "prettier": "^2.4.1",
+    "sharp": "^0.29.2",
+    "ts-node": "^10.4.0",
+    "typescript": "^4.4.4"
+  }
+}
