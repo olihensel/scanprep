@@ -1,0 +1,11 @@
+version: '3'
+services:
+  web:
+    build: .
+    volumes:
+      - ./in:/app/in
+      - ./out:/app/out
+    environment:
+      - WATCH_DIR=/app/in
+      - OUT_DIR=/app/out
+    restart: always
