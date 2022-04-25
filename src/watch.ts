@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { readdir } from 'fs/promises';
 import { join, relative, resolve } from 'path';
-import { splitPdf } from './split';
+import { rebundlePdf } from './split';
 function ensureEnv(env: string): string {
   const envVar = process.env[env];
   if (!envVar) {
@@ -24,7 +24,7 @@ let knownFiles: string[] = [];
 
 try {
   knownFiles = JSON.parse(readFileSync(knownFilesFilename, 'utf8'));
-} catch (e) {}
+} catch (e) { }
 function writeKnownFiles() {
   const knownFilesJson = JSON.stringify(knownFiles);
   writeFileSync(knownFilesFilename, knownFilesJson);
@@ -48,12 +48,12 @@ async function main() {
       const files = await getFilesRecursive(WATCH_DIR);
       const relativePaths = files.map((f) => relative(WATCH_DIR, f));
 
-      const newFiles = relativePaths.filter((f) => f.endsWith('.pdf') && !knownFiles.includes(f));
+      const newFiles = relativePaths.filter((f) => f.endsWith('/done') && !knownFiles.includes(f));
       if (newFiles.length > 0) {
         console.log(`New files: ${newFiles.join(', ')}`);
         for (const file of newFiles) {
           try {
-            await splitPdf(WATCH_DIR, OUT_DIR, file);
+            await rebundlePdf(WATCH_DIR, OUT_DIR, file);
           } catch (e2: any) {
             console.log(`Failed to split ${file}`, e2);
             writeFileSync(join(WATCH_DIR, file + '.err'), `${file}\n${e2?.toString()}`);

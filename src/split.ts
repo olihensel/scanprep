@@ -1,10 +1,11 @@
-import FileType from 'file-type';
+import FileType, { FileTypeResult } from 'file-type';
 import * as fs from 'fs/promises';
-import { join } from 'path';
+import { sortBy } from 'lodash';
+import { dirname, join } from 'path';
 import { PDFDocument, PDFImage, PDFName, PDFRawStream } from 'pdf-lib';
 import sharp from 'sharp';
-
 const quirc = require('node-quirc');
+console.log('loading...');
 
 export async function getQrCodes(blob: Buffer) {
   const img = await sharp(blob);
@@ -32,7 +33,10 @@ export async function getQrCodes(blob: Buffer) {
   }
 }
 
-export async function extractImagesFromPdf(filePath: string) {
+export async function extractImagesFromPdf(filePath: string): Promise<{
+  meta: FileTypeResult | undefined;
+  data: Buffer;
+}[]> {
   // source: https://github.com/Hopding/pdf-lib/issues/962#issuecomment-897824255
   const pdfDoc = await PDFDocument.load(await fs.readFile(filePath));
   const enumeratedIndirectObjects = pdfDoc.context.enumerateIndirectObjects();
@@ -58,30 +62,65 @@ export async function extractImagesFromPdf(filePath: string) {
   return imageInfos.filter((f) => f?.meta?.mime?.startsWith('image/'));
 }
 
-export async function splitPdf(inDir: string, outDir: string, filePath: string) {
-  const images = await extractImagesFromPdf(join(inDir, filePath));
+export async function extractImagesFromImageFolder(filePathOfDoneFile: string): Promise<{
+  meta: FileTypeResult | undefined;
+  data: Buffer;
+}[]> {
+  const baseDir = dirname(filePathOfDoneFile);
+
+  const dirEntries = await fs.readdir(baseDir, { withFileTypes: true });
+
+  const imageFiles = dirEntries.filter((f) => f.isFile() && f.name.endsWith('.jpeg'));
+
+  const imageInfos = await Promise.all(
+    sortBy(imageFiles, 'name').map(async (image) => {
+      const data = await fs.readFile(join(baseDir, image.name));
+      return { meta: await FileType.fromBuffer(data), data };
+    })
+  );
+
+  return imageInfos;
+
+}
+
+export async function rebundlePdf(inDir: string, outDir: string, filePath: string) {
+  const mode: 'simplex' | 'duplex' | string = (await fs.readFile(join(inDir, filePath), 'utf-8')).trim();
+  const images = await extractImagesFromImageFolder(join(inDir, filePath));
   let pdfIndex = 0;
   let currentOutputPdf: PDFDocument = await PDFDocument.create();
 
+  if (images.length === 0) {
+    console.log('no images found in folder', { filePath, inDir, outDir });
+    return;
+  }
   async function savePdfPart() {
     if (currentOutputPdf && currentOutputPdf.getPageCount() > 0) {
-      const outputFile = `${filePath.replace(/\//g, '_').replace(/\.pdf$/, '')}-${pdfIndex.toString().padStart(3, '0')}.pdf`;
+      const outputFile = `${dirname(filePath).replace(/\//g, '_').replace(/\.pdf$/, '')}-${pdfIndex.toString().padStart(3, '0')}.pdf`;
       console.log(`writing ${currentOutputPdf.getPageCount()} pages to ${outputFile}`);
       const pdfBuffer = await currentOutputPdf.save();
       await fs.writeFile(join(outDir, outputFile), pdfBuffer);
       pdfIndex++;
     }
   }
+  let skipOneMore = false;
   for (const image of images) {
+    if (skipOneMore) {
+      skipOneMore = false;
+      continue;
+    }
     const qrCodes = await getQrCodes(image.data);
-    // possible qr code texts: SPLIT, SPLITNEXT, DOC00000-DOC99999
+    // possible qr code texts: SPLIT, SPLITSKIP, DOC00000-DOC99999
     const split = qrCodes.includes('SPLIT') || qrCodes.some((qrCode) => qrCode.match(/^DOC\d{5}$/));
-    const splitNext = qrCodes.includes('SPLITNEXT');
+    const splitNext = qrCodes.includes('SPLITSKIP');
     if (split || splitNext) {
       await savePdfPart();
       currentOutputPdf = await PDFDocument.create();
       if (splitNext) {
         // splitnext means skip the current page - used with blank pages
+        // if mode is duplex, pass the instruction to skip one page further (to also skip the back side of the "SKIPNEXT" page)
+        if (mode === 'duplex') {
+          skipOneMore = true;
+        }
         continue;
       }
     }
