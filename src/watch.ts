@@ -24,7 +24,7 @@ let knownFiles: string[] = [];
 
 try {
   knownFiles = JSON.parse(readFileSync(knownFilesFilename, 'utf8'));
-} catch (e) { }
+} catch (e) {}
 function writeKnownFiles() {
   const knownFilesJson = JSON.stringify(knownFiles);
   writeFileSync(knownFilesFilename, knownFilesJson);
@@ -65,7 +65,7 @@ async function main() {
     } catch (e) {
       console.log(e);
     }
-    await asyncDelay(5000);
+    await asyncDelay(process.env.POLL_INTERVAL_MS ? parseInt(process.env.POLL_INTERVAL_MS) : 60000);
   }
 }
 main();
